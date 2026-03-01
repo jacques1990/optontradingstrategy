@@ -28,7 +28,7 @@
 
     .full { grid-column: 1 / -1; }
 
-    .inputs { display:grid; grid-template-columns: repeat(6, minmax(0,1fr)); gap:10px; }
+    .inputs { display:grid; grid-template-columns: repeat(7, minmax(0,1fr)); gap:10px; }
     .field { display:flex; flex-direction:column; gap:6px; }
     .field label { font-size:12px; color:#a8b0c2; }
     .field input, .field select {
@@ -39,7 +39,7 @@
 
     .note { margin-top:10px; }
 
-    @media (max-width: 900px){
+    @media (max-width: 950px){
       .grid { grid-template-columns: 1fr; }
       .inputs { grid-template-columns: 1fr 1fr; }
     }
@@ -47,7 +47,7 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>Options Strategy Decision Dashboard (with India VIX levels)</h1>
+  <h1>Options Strategy Decision Dashboard (VIX + Event Sentiment)</h1>
 
   <div class="grid">
 
@@ -104,11 +104,20 @@
           <label for="vix">India VIX</label>
           <input id="vix" type="number" step="0.1" placeholder="e.g., 13.5" />
         </div>
+
+        <div class="field">
+          <label for="eventSentiment">Event Sentiment</label>
+          <select id="eventSentiment">
+            <option value="NEUTRAL" selected>Neutral / Unknown</option>
+            <option value="GOOD">Good / Bullish</option>
+            <option value="BAD">Bad / Bearish</option>
+          </select>
+        </div>
       </div>
 
       <p class="muted note">
-No API needed. If you enter India VIX, the app automatically treats IV as LOW/NORMAL/HIGH using these bands:
-<12 Very Low | 12–15 Normal | 15–20 Elevated | 20–25 High | 25+ Very High
+VIX bands used: <12 Very Low | 12–15 Normal | 15–20 Elevated | 20–25 High | 25+ Very High.
+Event sentiment only “tilts” the bias when your signals are mixed.
       </p>
     </div>
 
@@ -147,7 +156,7 @@ No API needed. If you enter India VIX, the app automatically treats IV as LOW/NO
       <label class="chk"><input type="checkbox" data-group="IV_LOW" data-w="1">IV Low (manual override)</label>
       <label class="chk"><input type="checkbox" data-group="BIGMOVE" data-w="1">Expect BIG move (150–250+ pts)</label>
       <label class="chk"><input type="checkbox" data-group="PIN" data-w="1">Expect pinning / slow grind near strike</label>
-      <label class="chk"><input type="checkbox" data-group="EVENT" data-w="1">Event / news risk today</label>
+      <label class="chk"><input type="checkbox" data-group="EVENT" data-w="1">Event / news day today</label>
     </div>
 
     <div class="card full">
@@ -159,6 +168,7 @@ No API needed. If you enter India VIX, the app automatically treats IV as LOW/NO
         <div class="pill" id="bdPill">Breakdown: 0</div>
         <div class="pill" id="ivPill">IV: -</div>
         <div class="pill" id="vixPill">VIX: -</div>
+        <div class="pill" id="evtPill">Event: -</div>
         <div class="pill" id="dtePill">DTE: -</div>
       </div>
 
