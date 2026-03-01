@@ -6,7 +6,7 @@
   <title>Nifty Options Strategy Decision</title>
   <style>
     body { font-family: Arial, sans-serif; background:#0f1115; color:#eaeaea; margin:0; padding:20px; }
-    .wrap { max-width: 980px; margin: 0 auto; }
+    .wrap { max-width: 1000px; margin: 0 auto; }
     h1 { font-size: 20px; margin: 0 0 12px; }
 
     .grid { display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:12px; }
@@ -21,14 +21,14 @@
 
     .out { margin-top:12px; padding:14px; border-radius:14px; border:1px solid #2a2f3a; background:#12151c; }
     .big { font-size:16px; margin:0 0 6px; }
-    .muted { color:#a8b0c2; font-size:12px; margin:0; line-height:1.5; }
+    .muted { color:#a8b0c2; font-size:12px; margin:0; line-height:1.5; white-space:pre-line; }
 
     button { background:#2b6cff; border:none; color:white; padding:10px 12px; border-radius:10px; cursor:pointer; }
     button:hover { opacity:0.9; }
 
     .full { grid-column: 1 / -1; }
 
-    .inputs { display:grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap:10px; }
+    .inputs { display:grid; grid-template-columns: repeat(5, minmax(0,1fr)); gap:10px; }
     .field { display:flex; flex-direction:column; gap:6px; }
     .field label { font-size:12px; color:#a8b0c2; }
     .field input, .field select {
@@ -37,7 +37,9 @@
       outline:none;
     }
 
-    @media (max-width: 760px){
+    .note { margin-top:10px; }
+
+    @media (max-width: 860px){
       .grid { grid-template-columns: 1fr; }
       .inputs { grid-template-columns: 1fr 1fr; }
     }
@@ -45,7 +47,7 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>Nifty Options Strategy Decision Dashboard (Upgraded)</h1>
+  <h1>Options Strategy Decision Dashboard (Updated Strategy List)</h1>
 
   <div class="grid">
 
@@ -53,88 +55,93 @@
       <h2>Quick Inputs</h2>
       <div class="inputs">
         <div class="field">
-          <label for="price">Nifty Price</label>
+          <label for="instrument">Instrument</label>
+          <select id="instrument">
+            <option value="INDEX" selected>NIFTY Index Options</option>
+            <option value="STOCK">Stock Options</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="goal">Goal</label>
+          <select id="goal">
+            <option value="AUTO" selected>Auto (best fit)</option>
+            <option value="DIRECTIONAL">Directional (bull/bear)</option>
+            <option value="INCOME">Income / Theta</option>
+            <option value="VOLATILITY">Volatility (big move)</option>
+            <option value="HEDGE">Hedge / Protection</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="price">Price</label>
           <input id="price" type="number" placeholder="e.g., 25100" />
         </div>
+
         <div class="field">
           <label for="support">Support</label>
           <input id="support" type="number" placeholder="e.g., 24820" />
         </div>
+
         <div class="field">
           <label for="resistance">Resistance</label>
           <input id="resistance" type="number" placeholder="e.g., 25240" />
         </div>
+
         <div class="field">
           <label for="dte">Days to Expiry</label>
           <select id="dte">
             <option value="0">0DTE (Today)</option>
             <option value="1">1 day</option>
             <option value="2">2 days</option>
-            <option value="3" selected>3–5 days (Weekly)</option>
+            <option value="4" selected>3–5 days (Weekly)</option>
             <option value="7">~1 week</option>
             <option value="14">2+ weeks</option>
           </select>
         </div>
       </div>
-      <p class="muted" style="margin-top:10px;">
-        Tip: Here’s The Professional Way
-Step 1: Choose Your Trading Mode
 
-You usually trade short expiry Nifty, so:
-
-Mode	Chart Base	Update Frequency
-0DTE scalping	3m	Every 5m close
-Intraday	5m	Every 15m
-2–3 DTE	15m	2–3 times daily
-Weekly swing	1h	Once daily
+      <p class="muted note">
+This tool is offline (no API). You input + tick signals → it suggests the best matching strategy family and example strikes.
       </p>
     </div>
 
     <div class="card">
-      <h2>Market Structure (Trend)</h2>
+      <h2>Trend / Bias</h2>
       <label class="chk"><input type="checkbox" data-group="BULL" data-w="1">Higher High + Higher Low</label>
       <label class="chk"><input type="checkbox" data-group="BEAR" data-w="1">Lower High + Lower Low</label>
-      <label class="chk"><input type="checkbox" data-group="RANGE" data-w="1">Sideways / Choppy</label>
+      <label class="chk"><input type="checkbox" data-group="RANGE" data-w="1">Sideways / Range</label>
     </div>
 
     <div class="card">
-      <h2>EMA / Momentum</h2>
-      <label class="chk"><input type="checkbox" data-group="BULL" data-w="1">Price above 9 EMA</label>
-      <label class="chk"><input type="checkbox" data-group="BULL" data-w="1">9 EMA > 20 EMA</label>
-      <label class="chk"><input type="checkbox" data-group="BEAR" data-w="1">Price below 9 EMA</label>
-      <label class="chk"><input type="checkbox" data-group="BEAR" data-w="1">9 EMA < 20 EMA</label>
+      <h2>Momentum (EMA / RSI / MACD)</h2>
+      <label class="chk"><input type="checkbox" data-group="BULL" data-w="1">Price above 9 EMA + EMA stack bullish</label>
+      <label class="chk"><input type="checkbox" data-group="BEAR" data-w="1">Price below 9 EMA + EMA stack bearish</label>
       <label class="chk"><input type="checkbox" data-group="RANGE" data-w="1">EMAs flat/tangled</label>
-    </div>
 
-    <div class="card">
-      <h2>RSI / MACD</h2>
       <label class="chk"><input type="checkbox" data-group="BULL" data-w="1">RSI > 50</label>
       <label class="chk"><input type="checkbox" data-group="BEAR" data-w="1">RSI < 50</label>
       <label class="chk"><input type="checkbox" data-group="RANGE" data-w="1">RSI 45–55</label>
-      <label class="chk"><input type="checkbox" data-group="BULL" data-w="1">MACD above signal</label>
-      <label class="chk"><input type="checkbox" data-group="BEAR" data-w="1">MACD below signal</label>
+
+      <label class="chk"><input type="checkbox" data-group="BULL" data-w="1">MACD above signal / rising</label>
+      <label class="chk"><input type="checkbox" data-group="BEAR" data-w="1">MACD below signal / falling</label>
     </div>
 
     <div class="card">
-      <h2>Levels / Breakout vs Rejection</h2>
+      <h2>Breakout / Rejection</h2>
       <label class="chk"><input type="checkbox" data-group="BREAKOUT" data-w="1">Full-body close above resistance</label>
-      <label class="chk"><input type="checkbox" data-group="BREAKOUT" data-w="1">Volume rising into resistance</label>
       <label class="chk"><input type="checkbox" data-group="BREAKDOWN" data-w="1">Full-body close below support</label>
-      <label class="chk"><input type="checkbox" data-group="BREAKDOWN" data-w="1">Volume rising into support</label>
       <label class="chk"><input type="checkbox" data-group="RANGE" data-w="1">Long wicks / rejection dominates</label>
+      <label class="chk"><input type="checkbox" data-group="PRESSURE" data-w="1">Multiple tests → level weakening</label>
     </div>
 
     <div class="card">
-      <h2>Volatility</h2>
-      <label class="chk"><input type="checkbox" data-group="IV_HIGH" data-w="1">IV High / VIX rising</label>
-      <label class="chk"><input type="checkbox" data-group="IV_LOW" data-w="1">IV Low / VIX falling</label>
-      <label class="chk"><input type="checkbox" data-group="EVENT" data-w="1">Big news/event today</label>
-    </div>
-
-    <div class="card">
-      <h2>Move Expectation</h2>
-      <label class="chk"><input type="checkbox" data-group="BIGMOVE" data-w="1">Expect BIG move (200+ pts)</label>
-      <label class="chk"><input type="checkbox" data-group="SMALLMOVE" data-w="1">Expect SMALL move (50–100 pts)</label>
+      <h2>Volatility / Environment</h2>
+      <label class="chk"><input type="checkbox" data-group="IV_HIGH" data-w="1">IV High (premium expensive)</label>
+      <label class="chk"><input type="checkbox" data-group="IV_LOW" data-w="1">IV Low (premium cheap)</label>
+      <label class="chk"><input type="checkbox" data-group="BIGMOVE" data-w="1">Expect BIG move (150–250+ pts)</label>
+      <label class="chk"><input type="checkbox" data-group="PIN" data-w="1">Expect pinning / slow grind near strike</label>
+      <label class="chk"><input type="checkbox" data-group="EVENT" data-w="1">Event / news risk today</label>
     </div>
 
     <div class="card full">
@@ -151,7 +158,7 @@ Weekly swing	1h	Once daily
       <div class="out">
         <p class="big" id="strategyText">Tick your conditions to get a strategy.</p>
         <p class="muted" id="detailText">—</p>
-        <p class="muted" id="strikesText" style="margin-top:8px;">—</p>
+        <p class="muted" id="legsText" style="margin-top:8px;">—</p>
 
         <div style="margin-top:10px;">
           <button id="resetBtn">Reset</button>
