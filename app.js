@@ -32,14 +32,19 @@ function vixToIV(bucket) {
 
 function getInputs() {
   const instrument = document.getElementById("instrument").value; // INDEX | STOCK
-  const goal = document.getElementById("goal").value; // AUTO | DIRECTIONAL | INCOME | VOLATILITY | HEDGE
-  const eventSentiment = document.getElementById("eventSentiment").value; // NEUTRAL | GOOD | BAD
+  const goal = document.getElementById("goal").value;
+  const eventSentiment = document.getElementById("eventSentiment").value;
 
   const price = Number(document.getElementById("price").value);
   const support = Number(document.getElementById("support").value);
   const resistance = Number(document.getElementById("resistance").value);
   const dte = Number(document.getElementById("dte").value);
   const vix = Number(document.getElementById("vix").value);
+
+  const prevClose = Number(document.getElementById("prevClose").value);
+  const todayOpen = Number(document.getElementById("todayOpen").value);
+  const gapBehavior = document.getElementById("gapBehavior").value;
+  const vwapState = document.getElementById("vwapState").value;
 
   return {
     instrument,
@@ -49,7 +54,12 @@ function getInputs() {
     support: Number.isFinite(support) && support > 0 ? support : null,
     resistance: Number.isFinite(resistance) && resistance > 0 ? resistance : null,
     dte,
-    vix: Number.isFinite(vix) && vix > 0 ? vix : null
+    vix: Number.isFinite(vix) && vix > 0 ? vix : null,
+
+    prevClose: Number.isFinite(prevClose) && prevClose > 0 ? prevClose : null,
+    todayOpen: Number.isFinite(todayOpen) && todayOpen > 0 ? todayOpen : null,
+    gapBehavior,
+    vwapState
   };
 }
 
@@ -60,9 +70,48 @@ function baseOtmDistance(dte) {
   return 300;
 }
 
+function computeGap(prevClose, todayOpen) {
+  if (!Number.isFinite(prevClose) || !Number.isFinite(todayOpen)) return null;
+  const pts = todayOpen - prevClose;
+  const pct = (pts / prevClose) * 100;
+  return { pts, pct };
+}
+
+function gapScenario(inputs, ivHigh, ivLow) {
+  // This produces a readable scenario label based on the new inputs.
+  const g = computeGap(inputs.prevClose, inputs.todayOpen);
+  const beh = inputs.gapBehavior;
+
+  if (!g) return { key: "NO_GAP_DATA", label: "No gap data" };
+
+  const absPts = Math.abs(g.pts);
+  const isBig = absPts >= 150; // tweakable threshold for Nifty
+  const dir = g.pts < 0 ? "GAP_DOWN" : g.pts > 0 ? "GAP_UP" : "FLAT_OPEN";
+
+  if (dir === "GAP_DOWN") {
+    if (beh === "RECLAIM_VWAP" || beh === "REV_UP") return { key: "GAP_DOWN_REV", label: "Gap Down → Reversal/Reclaim" };
+    if (beh === "CONT_DOWN") return { key: "GAP_DOWN_CONT", label: "Gap Down → Continuation Down" };
+    if (beh === "CHOP_LOW" || beh === "REJECT_VWAP") return { key: "GAP_DOWN_CHOP", label: "Gap Down → Chop/Weak bounce" };
+    if (beh === "WHIPSAW") return { key: "GAP_DOWN_WHIP", label: "Gap Down → Whipsaw" };
+    if (beh === "RANGE_PIN") return { key: "GAP_DOWN_RANGE", label: "Gap Down → Range/Pin" };
+    return { key: isBig ? "GAP_DOWN_BIG" : "GAP_DOWN", label: isBig ? "Gap Down (Big)" : "Gap Down" };
+  }
+
+  if (dir === "GAP_UP") {
+    if (beh === "REJECT_VWAP" || beh === "CHOP_LOW") return { key: "GAP_UP_FADE", label: "Gap Up → Fade/Weakness" };
+    if (beh === "CONT_DOWN") return { key: "GAP_UP_REV_DOWN", label: "Gap Up → Reverse Down" };
+    if (beh === "RECLAIM_VWAP" || beh === "REV_UP") return { key: "GAP_UP_CONT", label: "Gap Up → Continuation Up" };
+    if (beh === "RANGE_PIN") return { key: "GAP_UP_RANGE", label: "Gap Up → Range/Pin" };
+    if (beh === "WHIPSAW") return { key: "GAP_UP_WHIP", label: "Gap Up → Whipsaw" };
+    return { key: isBig ? "GAP_UP_BIG" : "GAP_UP", label: isBig ? "Gap Up (Big)" : "Gap Up" };
+  }
+
+  return { key: "FLAT_OPEN", label: "Flat open" };
+}
+
 function legsForStrategy(strategyKey, inputs, biasKey) {
-  const atm = roundToStrike(inputs.price ?? 0);
-  if (!atm) return "Enter price to generate example strikes.";
+  const atm = roundToStrike(inputs.price ?? inputs.todayOpen ?? 0);
+  if (!atm) return "Enter Live Price (or Open) to generate example strikes.";
 
   const dist = baseOtmDistance(inputs.dte);
   const c1 = atm + dist;
@@ -81,21 +130,12 @@ function legsForStrategy(strategyKey, inputs, biasKey) {
   const ironCondor = `Iron Condor: Sell ${c1} CE + Buy ${c2} CE, Sell ${p1} PE + Buy ${p2} PE`;
   const ironFly    = `Iron Butterfly: Sell ${atm} CE + Sell ${atm} PE, Buy ${atm + dist} CE + Buy ${atm - dist} PE`;
 
-  const calendar   = `Calendar: Sell near-expiry ${atm} option, Buy next-week/month ${atm} option (same strike)`;
-  const straddle   = `Long Straddle: Buy ${atm} CE + Buy ${atm} PE`;
-  const strangle   = `Long Strangle: Buy ${atm + dist} CE + Buy ${atm - dist} PE`;
+  const calendar = `Calendar: Sell near-expiry ${atm} option, Buy next-week/month ${atm} option (same strike)`;
+  const straddle = `Long Straddle: Buy ${atm} CE + Buy ${atm} PE`;
+  const strangle = `Long Strangle: Buy ${atm + dist} CE + Buy ${atm - dist} PE`;
 
-  const butterflyCall = `Butterfly (Call): Buy ${atm} CE, Sell 2x ${atm + dist} CE, Buy ${atm + 2 * dist} CE`;
-  const butterflyPut  = `Butterfly (Put): Buy ${atm} PE, Sell 2x ${atm - dist} PE, Buy ${atm - 2 * dist} PE`;
-  const bwbCall       = `Broken Wing Butterfly (Call skew): Buy ${atm} CE, Sell 2x ${atm + dist} CE, Buy ${atm + 3 * dist} CE`;
-
-  const ratio = biasKey === "BULL"
-    ? `Ratio Spread (Bullish): Buy 1x ${atm} CE, Sell 2x ${atm + dist} CE (strict risk control)`
-    : `Ratio Spread (Bearish): Buy 1x ${atm} PE, Sell 2x ${atm - dist} PE (strict risk control)`;
-
-  const coveredCall = `Covered Call (Stock only): Hold shares + Sell OTM Call`;
-  const marriedPut  = `Married Put (Stock only): Hold shares + Buy Put (protection)`;
-  const csp         = `Cash-Secured Put (Stock only): Sell Put with cash reserved for assignment`;
+  const butterflyCall = `Butterfly (Call): Buy ${atm} CE, Sell 2x ${atm + dist} CE, Buy ${atm + 2*dist} CE`;
+  const butterflyPut  = `Butterfly (Put): Buy ${atm} PE, Sell 2x ${atm - dist} PE, Buy ${atm - 2*dist} PE`;
 
   switch (strategyKey) {
     case "LONG_CALL": return longCall;
@@ -110,205 +150,145 @@ function legsForStrategy(strategyKey, inputs, biasKey) {
     case "STRADDLE": return straddle;
     case "STRANGLE": return strangle;
     case "BUTTERFLY": return biasKey === "BEAR" ? butterflyPut : butterflyCall;
-    case "BWB": return bwbCall;
-    case "RATIO": return ratio;
-    case "COVERED_CALL": return coveredCall;
-    case "MARRIED_PUT": return marriedPut;
-    case "CASH_SECURED_PUT": return csp;
     default: return "—";
   }
 }
 
-/**
- * Event sentiment "tilt":
- * - If chart signals are mixed (no strong bias), sentiment can gently push bias.
- * - It will NOT override strong bull/bear signals.
- */
 function applyEventTilt(baseBias, scores, inputs) {
   const { bull, bear } = scores;
-  const sentiment = inputs.eventSentiment;
+  const s = inputs.eventSentiment;
 
-  // Strong bias? do nothing
   if (baseBias === "BULL" || baseBias === "BEAR") return baseBias;
-
-  // Mixed zone: allow a tilt if not strongly opposite
-  if (sentiment === "GOOD" && bear < 3) return "BULL_TILT";
-  if (sentiment === "BAD" && bull < 3) return "BEAR_TILT";
-  return baseBias; // NONE
+  if (s === "GOOD" && bear < 3) return "BULL_TILT";
+  if (s === "BAD" && bull < 3) return "BEAR_TILT";
+  return baseBias;
 }
 
-function decideStrategy(scores, inputs, ivHigh, ivLow) {
-  const { bull, bear, range, breakout, breakdown, pressure } = scores;
+function decideStrategy(scores, inputs, ivHigh, ivLow, scenario) {
+  const { bull, bear, range, breakout, breakdown } = scores;
 
   const bigMove = anyGroup("BIGMOVE");
   const pin = anyGroup("PIN");
   const eventDay = anyGroup("EVENT");
 
-  const exp0 = inputs.dte === 0;
-  const nearExpiry = inputs.dte <= 2;
-  const hasBreakout = breakout >= 1;
-  const hasBreakdown = breakdown >= 1;
-  const stockOnlyAllowed = inputs.instrument === "STOCK";
-
-  // base bias
+  // Base bias
   let bias = "NONE";
   if (bull >= 3 && bear < 3) bias = "BULL";
   if (bear >= 3 && bull < 3) bias = "BEAR";
   const isRange = range >= 2 && bias === "NONE";
 
-  // apply event sentiment tilt if needed
+  // Event tilt if mixed
   const tilted = applyEventTilt(bias, scores, inputs);
-
-  // convert tilt into usable direction (soft)
   const softBull = tilted === "BULL_TILT";
   const softBear = tilted === "BEAR_TILT";
 
   const goal = inputs.goal;
+  const nearExpiry = inputs.dte <= 2;
 
-  let key = "NONE";
-  let title = "No clear edge → Wait / No trade";
-  let why = "Need clearer bias OR range + high IV OR volatility setup.";
-
-  // HEDGE goal
-  if (goal === "HEDGE") {
-    if (stockOnlyAllowed) {
-      key = "MARRIED_PUT";
-      title = "Hedge → Married Put (Protective Put)";
-      why = "Stock protection: buy put to cap downside.";
-    } else {
-      // pick side using strong bias or tilt
-      const side = (bias === "BEAR" || softBear) ? "BEAR" : "BULL";
-      key = side === "BEAR" ? "BEAR_CALL_CREDIT" : "BULL_PUT_CREDIT";
-      title = "Hedge-like (Index) → Defined-risk Credit Spread";
-      why = "Index has no shares. Use defined-risk spreads as hedge-style structures.";
+  // ---- GAP SCENARIO PRIORITY (only when gap data exists) ----
+  // These rules intentionally prefer defined-risk spreads on shock days.
+  if (scenario.key.startsWith("GAP_DOWN")) {
+    if (ivHigh && (inputs.gapBehavior === "CHOP_LOW" || inputs.gapBehavior === "REJECT_VWAP" || inputs.gapBehavior === "UNKNOWN")) {
+      return {
+        key: "BEAR_CALL_CREDIT",
+        title: "GAP DOWN (chop/weak) → Bear Call Spread (Credit)",
+        why: "Shock gap + IV high + weak bounce = sell call spread (defined risk).",
+        bias: "BEAR"
+      };
     }
-    return { key, title, why, bias: (bias !== "NONE" ? bias : (softBear ? "BEAR" : softBull ? "BULL" : "NONE")) };
+    if (inputs.gapBehavior === "CONT_DOWN") {
+      // If IV is extremely high, still prefer spread; if IV low (rare here), could buy puts.
+      return {
+        key: ivHigh ? "BEAR_CALL_CREDIT" : "BEAR_PUT_DEBIT",
+        title: ivHigh ? "GAP DOWN continuation → Bear Call Spread (Credit)" : "GAP DOWN continuation → Bear Put Spread (Debit)",
+        why: ivHigh ? "IV high favors selling spreads while trend stays down." : "IV low + continuation favors debit bear put spread.",
+        bias: "BEAR"
+      };
+    }
+    if (inputs.gapBehavior === "REV_UP" || inputs.gapBehavior === "RECLAIM_VWAP") {
+      return {
+        key: "BULL_PUT_CREDIT",
+        title: "GAP DOWN reversal/reclaim → Bull Put Spread (Credit)",
+        why: "Reversal + reclaim often causes IV to cool; selling put spread = defined risk.",
+        bias: "BULL"
+      };
+    }
+    if (inputs.gapBehavior === "RANGE_PIN" && ivHigh) {
+      return {
+        key: "IRON_CONDOR",
+        title: "GAP DOWN then range + IV High → Iron Condor",
+        why: "After shock, if price stabilizes into range and IV stays high, condor fits.",
+        bias: "NONE"
+      };
+    }
+    if (inputs.gapBehavior === "WHIPSAW") {
+      return {
+        key: "IRON_CONDOR",
+        title: "GAP DOWN whipsaw → Stay defined risk (Condor only if clear range)",
+        why: "Whipsaw days destroy option buyers; wait or use very conservative defined-risk setups.",
+        bias: "NONE"
+      };
+    }
   }
 
-  // VOLATILITY goal
-  if (goal === "VOLATILITY") {
-    if (ivLow && bigMove) {
-      key = "STRADDLE";
-      title = "Volatility → Long Straddle";
-      why = "IV Low + expecting big move = volatility expansion.";
-    } else if (ivLow && (eventDay || pressure)) {
-      key = "STRANGLE";
-      title = "Volatility → Long Strangle";
-      why = "IV Low + possible breakout/event; cheaper than straddle.";
-    } else if (ivHigh) {
-      const side = (bias === "BEAR" || softBear) ? "BEAR" : "BULL";
-      key = side === "BEAR" ? "BEAR_CALL_CREDIT" : "BULL_PUT_CREDIT";
-      title = "Volatility note: IV High → Prefer defined-risk selling";
-      why = "Buying straddle/strangle when IV high risks IV crush. Prefer spreads.";
+  if (scenario.key.startsWith("GAP_UP")) {
+    if (ivHigh && (inputs.gapBehavior === "GAP_UP_FADE" || inputs.gapBehavior === "REJECT_VWAP" || inputs.gapBehavior === "CHOP_LOW")) {
+      return {
+        key: "BULL_PUT_CREDIT",
+        title: "GAP UP holding strength → Bull Put Spread (Credit)",
+        why: "If market holds up and IV is high, selling put spread benefits from theta/IV cooling.",
+        bias: "BULL"
+      };
     }
-    return { key, title, why, bias: (bias !== "NONE" ? bias : (softBear ? "BEAR" : softBull ? "BULL" : "NONE")) };
+    if (inputs.gapBehavior === "CONT_DOWN" || inputs.gapBehavior === "REJECT_VWAP") {
+      return {
+        key: "BEAR_CALL_CREDIT",
+        title: "GAP UP fading → Bear Call Spread (Credit)",
+        why: "Gap up fade + IV high often rewards call-side credit spread.",
+        bias: "BEAR"
+      };
+    }
   }
 
-  // INCOME goal
+  // ---- GOAL OVERRIDES (same as earlier logic) ----
   if (goal === "INCOME") {
-    if (isRange && ivHigh) {
-      key = "IRON_CONDOR";
-      title = "Income/Neutral → Iron Condor";
-      why = "Range + IV High = classic theta-selling environment (defined risk).";
-    } else if (pin && (nearExpiry || exp0) && ivHigh && !bigMove) {
-      key = "IRON_BUTTERFLY";
-      title = "Income/Neutral → Iron Butterfly";
-      why = "Pinning + near expiry + expensive premiums = iron fly income setup.";
-    } else {
-      const side = (bias === "BEAR" || softBear) ? "BEAR" : (bias === "BULL" || softBull) ? "BULL" : "BULL";
-      key = side === "BEAR" ? "BEAR_CALL_CREDIT" : "BULL_PUT_CREDIT";
-      title = "Income → Credit Spread (defined risk)";
-      why = "If not clean range, sell one side with hedge.";
-    }
-    return { key, title, why, bias: (bias !== "NONE" ? bias : (softBear ? "BEAR" : softBull ? "BULL" : "NONE")) };
+    if (isRange && ivHigh) return { key:"IRON_CONDOR", title:"Income → Iron Condor", why:"Range + IV high = theta-selling environment.", bias:"NONE" };
+    if (pin && nearExpiry && ivHigh) return { key:"IRON_BUTTERFLY", title:"Income → Iron Butterfly", why:"Pinning near expiry + IV high = iron fly setup.", bias:"NONE" };
+    const side = (bias === "BEAR" || softBear) ? "BEAR" : "BULL";
+    return { key: side==="BEAR" ? "BEAR_CALL_CREDIT":"BULL_PUT_CREDIT", title:"Income → Credit Spread (defined risk)", why:"Not clean range: sell one side with hedge.", bias: side };
   }
 
-  // DIRECTIONAL goal
+  if (goal === "VOLATILITY") {
+    if (ivLow && bigMove) return { key:"STRADDLE", title:"Volatility → Long Straddle", why:"IV low + big move expected.", bias:"NONE" };
+    if (ivLow) return { key:"STRANGLE", title:"Volatility → Long Strangle", why:"IV low + uncertainty, cheaper than straddle.", bias:"NONE" };
+    // IV high -> avoid buying
+    const side = (bias === "BEAR" || softBear) ? "BEAR" : "BULL";
+    return { key: side==="BEAR" ? "BEAR_CALL_CREDIT":"BULL_PUT_CREDIT", title:"Volatility note → IV High, prefer spreads", why:"Avoid buying into high IV (crush risk).", bias: side };
+  }
+
   if (goal === "DIRECTIONAL") {
-    if ((bias === "BULL" || softBull) && ivLow && hasBreakout) {
-      key = "BULL_CALL_DEBIT";
-      title = "Directional Bullish → Bull Call Spread (Debit)";
-      why = "Bull bias (or good-event tilt) + breakout + IV low = debit spread fits.";
-    } else if ((bias === "BEAR" || softBear) && ivLow && hasBreakdown) {
-      key = "BEAR_PUT_DEBIT";
-      title = "Directional Bearish → Bear Put Spread (Debit)";
-      why = "Bear bias (or bad-event tilt) + breakdown + IV low = debit spread fits.";
-    } else if ((bias === "BULL" || softBull) && ivLow) {
-      key = "LONG_CALL";
-      title = "Directional Bullish → Long Call";
-      why = "Bull bias (or good-event tilt) + IV low favors buying calls.";
-    } else if ((bias === "BEAR" || softBear) && ivLow) {
-      key = "LONG_PUT";
-      title = "Directional Bearish → Long Put";
-      why = "Bear bias (or bad-event tilt) + IV low favors buying puts.";
-    } else if (ivHigh) {
-      const side = (bias === "BEAR" || softBear) ? "BEAR" : "BULL";
-      key = side === "BEAR" ? "BEAR_CALL_CREDIT" : "BULL_PUT_CREDIT";
-      title = "Directional note: IV high → prefer Credit Spread";
-      why = "When IV is high, buying options is expensive; defined-risk selling fits better.";
-    }
-    return { key, title, why, bias: (bias !== "NONE" ? bias : (softBear ? "BEAR" : softBull ? "BULL" : "NONE")) };
+    if ((bias === "BULL" || softBull) && ivLow && breakout >= 1) return { key:"BULL_CALL_DEBIT", title:"Directional Bull → Bull Call Spread (Debit)", why:"Bull + breakout + IV low.", bias:"BULL" };
+    if ((bias === "BEAR" || softBear) && ivLow && breakdown >= 1) return { key:"BEAR_PUT_DEBIT", title:"Directional Bear → Bear Put Spread (Debit)", why:"Bear + breakdown + IV low.", bias:"BEAR" };
+    if ((bias === "BULL" || softBull) && ivLow) return { key:"LONG_CALL", title:"Directional Bull → Long Call", why:"Bull + IV low.", bias:"BULL" };
+    if ((bias === "BEAR" || softBear) && ivLow) return { key:"LONG_PUT", title:"Directional Bear → Long Put", why:"Bear + IV low.", bias:"BEAR" };
+    const side = (bias === "BEAR" || softBear) ? "BEAR" : "BULL";
+    return { key: side==="BEAR" ? "BEAR_CALL_CREDIT":"BULL_PUT_CREDIT", title:"Directional note → IV high, use credit spread", why:"Buying expensive options is risky.", bias: side };
   }
 
-  // AUTO mode
-  if (isRange && ivHigh) {
-    key = "IRON_CONDOR";
-    title = "AUTO → Iron Condor";
-    why = "Range + IV High = income setup.";
-  }
-  else if (pin && (nearExpiry || exp0) && ivHigh && !bigMove) {
-    key = "IRON_BUTTERFLY";
-    title = "AUTO → Iron Butterfly";
-    why = "Pinning + near expiry + IV High = iron fly income setup.";
-  }
-  else if (bigMove && ivLow) {
-    key = "STRADDLE";
-    title = "AUTO → Long Straddle";
-    why = "IV Low + big move expected = volatility expansion.";
-  }
-  else if ((bull >= 3 || softBull) && ivLow && hasBreakout) {
-    key = "BULL_CALL_DEBIT";
-    title = "AUTO → Bull Call Spread (Debit)";
-    why = "Bull bias (or good-event tilt) + breakout + IV low favors debit spread.";
-  }
-  else if ((bear >= 3 || softBear) && ivLow && hasBreakdown) {
-    key = "BEAR_PUT_DEBIT";
-    title = "AUTO → Bear Put Spread (Debit)";
-    why = "Bear bias (or bad-event tilt) + breakdown + IV low favors debit spread.";
-  }
-  else if ((bull >= 3 || softBull) && ivHigh) {
-    key = "BULL_PUT_CREDIT";
-    title = "AUTO → Bull Put Spread (Credit)";
-    why = "IV High + bullish bias (or good-event tilt) = sell put spread (defined risk).";
-  }
-  else if ((bear >= 3 || softBear) && ivHigh) {
-    key = "BEAR_CALL_CREDIT";
-    title = "AUTO → Bear Call Spread (Credit)";
-    why = "IV High + bearish bias (or bad-event tilt) = sell call spread (defined risk).";
-  }
-  else if (pin && ivLow && !bigMove) {
-    key = "BUTTERFLY";
-    title = "AUTO → Butterfly Spread (low vol / pinning)";
-    why = "If you expect price to stick near a zone with low IV, butterflies can fit.";
-  }
-  else if (inputs.dte >= 7 && (ivLow || eventDay)) {
-    key = "CALENDAR";
-    title = "AUTO → Calendar Spread";
-    why = "More time available; calendars fit slow near-term + later move/IV shift.";
-  }
-  else {
-    key = "NONE";
-    title = "AUTO → No Trade / Wait";
-    why = "Signals not aligned enough.";
-  }
+  // ---- AUTO fallback (non-gap days or no scenario selected) ----
+  if (isRange && ivHigh) return { key:"IRON_CONDOR", title:"AUTO → Iron Condor", why:"Range + IV high.", bias:"NONE" };
+  if (pin && nearExpiry && ivHigh && !bigMove) return { key:"IRON_BUTTERFLY", title:"AUTO → Iron Butterfly", why:"Pinning + near expiry + IV high.", bias:"NONE" };
+  if (bigMove && ivLow) return { key:"STRADDLE", title:"AUTO → Long Straddle", why:"IV low + big move expected.", bias:"NONE" };
 
-  if (inputs.instrument === "STOCK" && key === "NONE") {
-    key = "COVERED_CALL";
-    title = "STOCK fallback → Covered Call";
-    why = "If you hold stock and want income, covered calls are baseline.";
-  }
+  if ((bull >= 3 || softBull) && ivHigh) return { key:"BULL_PUT_CREDIT", title:"AUTO → Bull Put Spread (Credit)", why:"IV high + bullish bias.", bias:"BULL" };
+  if ((bear >= 3 || softBear) && ivHigh) return { key:"BEAR_CALL_CREDIT", title:"AUTO → Bear Call Spread (Credit)", why:"IV high + bearish bias.", bias:"BEAR" };
 
-  return { key, title, why, bias: (bias !== "NONE" ? bias : (softBear ? "BEAR" : softBull ? "BULL" : "NONE")) };
+  if ((bull >= 3 || softBull) && ivLow) return { key:"BULL_CALL_DEBIT", title:"AUTO → Bull Call Spread (Debit)", why:"IV low + bullish bias.", bias:"BULL" };
+  if ((bear >= 3 || softBear) && ivLow) return { key:"BEAR_PUT_DEBIT", title:"AUTO → Bear Put Spread (Debit)", why:"IV low + bearish bias.", bias:"BEAR" };
+
+  if (inputs.dte >= 7 && (ivLow || eventDay)) return { key:"CALENDAR", title:"AUTO → Calendar Spread", why:"More time available + possible IV/slow move edge.", bias:"NONE" };
+
+  return { key:"NONE", title:"AUTO → No Trade / Wait", why:"Signals not aligned enough.", bias:"NONE" };
 }
 
 function decide() {
@@ -320,7 +300,7 @@ function decide() {
     range: sumGroup("RANGE"),
     breakout: sumGroup("BREAKOUT"),
     breakdown: sumGroup("BREAKDOWN"),
-    pressure: sumGroup("PRESSURE"),
+    pressure: sumGroup("PRESSURE")
   };
 
   // VIX -> IV state (auto if VIX entered)
@@ -333,8 +313,19 @@ function decide() {
   const ivHigh = inputs.vix ? vixIV.ivHigh : ivHighManual;
   const ivLow  = inputs.vix ? vixIV.ivLow  : ivLowManual;
 
+  // Gap calculation UI
+  const gap = computeGap(inputs.prevClose, inputs.todayOpen);
+  const gapPtsEl = document.getElementById("gapPillStatic");
+  const gapPctEl = document.getElementById("gapPctStatic");
+  if (gapPtsEl) gapPtsEl.value = gap ? `${gap.pts.toFixed(0)} pts` : "—";
+  if (gapPctEl) gapPctEl.value = gap ? `${gap.pct.toFixed(2)} %` : "—";
+
+  // Scenario
+  const scen = gapScenario(inputs, ivHigh, ivLow);
+
   // Pills
   const set = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+  set("scenarioPill", `Scenario: ${scen.label}`);
   set("bullPill", `Bull: ${scores.bull}`);
   set("bearPill", `Bear: ${scores.bear}`);
   set("rangePill", `Range: ${scores.range}`);
@@ -352,27 +343,23 @@ function decide() {
     evtPill.textContent = `Event: ${s === "GOOD" ? "GOOD" : s === "BAD" ? "BAD" : "NEUTRAL"}`;
   }
 
-  const pick = decideStrategy(scores, inputs, ivHigh, ivLow);
+  const pick = decideStrategy(scores, inputs, ivHigh, ivLow, scen);
 
+  // Output
   const strategyText = document.getElementById("strategyText");
   const detailText = document.getElementById("detailText");
   const legsText = document.getElementById("legsText");
 
   if (strategyText) strategyText.textContent = pick.title;
 
-  let extra = [];
-  if (anyGroup("EVENT")) extra.push("Event day ON → reduce size, defined risk preferred.");
-  if (inputs.instrument === "INDEX") extra.push("Index mode: Covered Call / Married Put / CSP don’t apply.");
-  if (!inputs.price) extra.push("Enter Price to generate strikes.");
-  if (inputs.vix && vixInfo.bucket === "VERY_HIGH") extra.push("VIX very high → IV crush risk for option buying; prefer defined-risk selling.");
-  if (inputs.vix && vixInfo.bucket === "VERY_LOW") extra.push("VIX very low → options cheap; volatility buys/debit spreads become more attractive.");
-  if (inputs.eventSentiment === "GOOD") extra.push("Event sentiment = GOOD → bias tilt bullish if chart is mixed.");
-  if (inputs.eventSentiment === "BAD") extra.push("Event sentiment = BAD → bias tilt bearish if chart is mixed.");
+  let notes = [];
+  if (anyGroup("EVENT")) notes.push("Event day ON → reduce size; defined risk preferred.");
+  if (inputs.vix && vixInfo.bucket === "VERY_HIGH") notes.push("VIX very high → avoid buying options (IV crush risk).");
+  if (inputs.gapBehavior === "UNKNOWN") notes.push("Gap behavior = Unknown → wait first 15–30 minutes before committing.");
+  if (!inputs.price && inputs.todayOpen) notes.push("Tip: Enter Live Price for better strike suggestions (Open will be used as fallback).");
 
   if (detailText) {
-    detailText.textContent =
-      `Why: ${pick.why}\n` +
-      (extra.length ? `Notes:\n• ${extra.join("\n• ")}` : "");
+    detailText.textContent = `Why: ${pick.why}\n` + (notes.length ? `Notes:\n• ${notes.join("\n• ")}` : "");
   }
 
   if (legsText) {
@@ -384,7 +371,11 @@ function decide() {
 function wireEvents() {
   document.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.addEventListener("change", decide));
 
-  ["instrument","goal","price","support","resistance","dte","vix","eventSentiment"].forEach(id => {
+  [
+    "instrument","goal","eventSentiment",
+    "price","support","resistance","dte","vix",
+    "prevClose","todayOpen","gapBehavior","vwapState"
+  ].forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
     el.addEventListener("input", decide);
@@ -393,14 +384,13 @@ function wireEvents() {
 
   document.getElementById("resetBtn").addEventListener("click", () => {
     document.querySelectorAll('input[type="checkbox"]').forEach(cb => (cb.checked = false));
-    document.getElementById("price").value = "";
-    document.getElementById("support").value = "";
-    document.getElementById("resistance").value = "";
-    document.getElementById("vix").value = "";
+    ["price","support","resistance","vix","prevClose","todayOpen"].forEach(id => document.getElementById(id).value = "");
     document.getElementById("dte").value = "4";
     document.getElementById("goal").value = "AUTO";
     document.getElementById("instrument").value = "INDEX";
     document.getElementById("eventSentiment").value = "NEUTRAL";
+    document.getElementById("gapBehavior").value = "UNKNOWN";
+    document.getElementById("vwapState").value = "UNKNOWN";
     decide();
   });
 
