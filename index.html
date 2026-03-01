@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Nifty Options Strategy Decision</title>
+  <style>
+    body { font-family: Arial, sans-serif; background:#0f1115; color:#eaeaea; margin:0; padding:20px; }
+    .wrap { max-width: 980px; margin: 0 auto; }
+    h1 { font-size: 20px; margin: 0 0 12px; }
+    .grid { display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:12px; }
+    .card { background:#171a21; border:1px solid #2a2f3a; border-radius:14px; padding:14px; }
+    .card h2 { font-size: 14px; margin: 0 0 10px; color:#cfd6ff; }
+    label { display:flex; gap:10px; align-items:flex-start; padding:6px 0; cursor:pointer; }
+    input[type="checkbox"]{ transform: translateY(2px); }
+    .row { display:flex; gap:12px; flex-wrap:wrap; }
+    .pill { background:#10131a; border:1px solid #2a2f3a; padding:8px 10px; border-radius:999px; font-size:12px; }
+    .out { margin-top:12px; padding:14px; border-radius:14px; border:1px solid #2a2f3a; background:#12151c; }
+    .big { font-size:16px; margin:0 0 6px; }
+    .muted { color:#a8b0c2; font-size:12px; margin:0; }
+    button { background:#2b6cff; border:none; color:white; padding:10px 12px; border-radius:10px; cursor:pointer; }
+    button:hover { opacity:0.9; }
+    .full { grid-column: 1 / -1; }
+    @media (max-width: 760px){ .grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Nifty Options Strategy Decision Dashboard</h1>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Market Structure (Trend)</h2>
+      <label><input type="checkbox" data-group="BULL" data-w="1">Higher High + Higher Low</label>
+      <label><input type="checkbox" data-group="BEAR" data-w="1">Lower High + Lower Low</label>
+      <label><input type="checkbox" data-group="RANGE" data-w="1">Sideways / Choppy</label>
+    </div>
+
+    <div class="card">
+      <h2>EMA / Momentum</h2>
+      <label><input type="checkbox" data-group="BULL" data-w="1">Price above 9 EMA</label>
+      <label><input type="checkbox" data-group="BULL" data-w="1">9 EMA > 20 EMA</label>
+      <label><input type="checkbox" data-group="BEAR" data-w="1">Price below 9 EMA</label>
+      <label><input type="checkbox" data-group="BEAR" data-w="1">9 EMA < 20 EMA</label>
+      <label><input type="checkbox" data-group="RANGE" data-w="1">EMAs flat/tangled</label>
+    </div>
+
+    <div class="card">
+      <h2>RSI / MACD</h2>
+      <label><input type="checkbox" data-group="BULL" data-w="1">RSI > 50</label>
+      <label><input type="checkbox" data-group="BEAR" data-w="1">RSI < 50</label>
+      <label><input type="checkbox" data-group="RANGE" data-w="1">RSI 45–55</label>
+      <label><input type="checkbox" data-group="BULL" data-w="1">MACD above signal</label>
+      <label><input type="checkbox" data-group="BEAR" data-w="1">MACD below signal</label>
+    </div>
+
+    <div class="card">
+      <h2>Levels / Breakout vs Rejection</h2>
+      <label><input type="checkbox" data-group="BREAKOUT" data-w="1">Full-body close above resistance</label>
+      <label><input type="checkbox" data-group="BREAKOUT" data-w="1">Volume rising into resistance</label>
+      <label><input type="checkbox" data-group="BREAKDOWN" data-w="1">Full-body close below support</label>
+      <label><input type="checkbox" data-group="BREAKDOWN" data-w="1">Volume rising into support</label>
+      <label><input type="checkbox" data-group="RANGE" data-w="1">Long wicks / rejection dominates</label>
+    </div>
+
+    <div class="card">
+      <h2>Volatility</h2>
+      <label><input type="checkbox" data-group="IV_HIGH" data-w="1">IV High / VIX rising</label>
+      <label><input type="checkbox" data-group="IV_LOW" data-w="1">IV Low / VIX falling</label>
+    </div>
+
+    <div class="card">
+      <h2>Expiry / Expected Move</h2>
+      <label><input type="checkbox" data-group="EXP_0DTE" data-w="1">0DTE / last day</label>
+      <label><input type="checkbox" data-group="BIGMOVE" data-w="1">Expect BIG move (200+ pts)</label>
+      <label><input type="checkbox" data-group="SMALLMOVE" data-w="1">Expect SMALL move (50–100 pts)</label>
+      <label><input type="checkbox" data-group="EVENT" data-w="1">Big news/event today</label>
+    </div>
+
+    <div class="card full">
+      <div class="row">
+        <div class="pill" id="bullPill">Bull: 0</div>
+        <div class="pill" id="bearPill">Bear: 0</div>
+        <div class="pill" id="rangePill">Range: 0</div>
+        <div class="pill" id="boPill">Breakout: 0</div>
+        <div class="pill" id="bdPill">Breakdown: 0</div>
+        <div class="pill" id="ivPill">IV: -</div>
+        <div class="pill" id="expPill">Expiry: -</div>
+      </div>
+
+      <div class="out" id="outputBox">
+        <p class="big" id="strategyText">Tick your conditions to get a strategy.</p>
+        <p class="muted" id="detailText">If signals conflict, treat it as chop and protect capital.</p>
+        <div style="margin-top:10px;">
+          <button id="resetBtn">Reset</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Load external JS -->
+<script src="app.js"></script>
+</body>
+</html>
