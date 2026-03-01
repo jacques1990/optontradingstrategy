@@ -6,7 +6,7 @@
   <title>Options Strategy Decision Dashboard</title>
   <style>
     body { font-family: Arial, sans-serif; background:#0f1115; color:#eaeaea; margin:0; padding:20px; }
-    .wrap { max-width: 1000px; margin: 0 auto; }
+    .wrap { max-width: 1100px; margin: 0 auto; }
     h1 { font-size: 20px; margin: 0 0 12px; }
 
     .grid { display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:12px; }
@@ -28,18 +28,17 @@
 
     .full { grid-column: 1 / -1; }
 
-    .inputs { display:grid; grid-template-columns: repeat(7, minmax(0,1fr)); gap:10px; }
+    .inputs { display:grid; grid-template-columns: repeat(8, minmax(0,1fr)); gap:10px; }
     .field { display:flex; flex-direction:column; gap:6px; }
     .field label { font-size:12px; color:#a8b0c2; }
     .field input, .field select {
       background:#0f131a; color:#eaeaea; border:1px solid #2a2f3a;
-      border-radius:10px; padding:10px;
-      outline:none;
+      border-radius:10px; padding:10px; outline:none;
     }
 
     .note { margin-top:10px; }
 
-    @media (max-width: 950px){
+    @media (max-width: 980px){
       .grid { grid-template-columns: 1fr; }
       .inputs { grid-template-columns: 1fr 1fr; }
     }
@@ -47,12 +46,13 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>Options Strategy Decision Dashboard (VIX + Event Sentiment)</h1>
+  <h1>Options Strategy Decision Dashboard (VIX + Events + Gap Scenarios)</h1>
 
   <div class="grid">
 
     <div class="card full">
       <h2>Quick Inputs</h2>
+
       <div class="inputs">
         <div class="field">
           <label for="instrument">Instrument</label>
@@ -74,7 +74,7 @@
         </div>
 
         <div class="field">
-          <label for="price">Price</label>
+          <label for="price">Live Price</label>
           <input id="price" type="number" placeholder="e.g., 25100" />
         </div>
 
@@ -102,7 +102,7 @@
 
         <div class="field">
           <label for="vix">India VIX</label>
-          <input id="vix" type="number" step="0.1" placeholder="e.g., 13.5" />
+          <input id="vix" type="number" step="0.1" placeholder="e.g., 22.1" />
         </div>
 
         <div class="field">
@@ -116,9 +116,62 @@
       </div>
 
       <p class="muted note">
-VIX bands used: <12 Very Low | 12–15 Normal | 15–20 Elevated | 20–25 High | 25+ Very High.
-Event sentiment only “tilts” the bias when your signals are mixed.
+VIX bands: <12 Very Low | 12–15 Normal | 15–20 Elevated | 20–25 High | 25+ Very High.
+If you enter VIX, the app auto-treats IV LOW/HIGH. (Checkbox IV Low/High becomes manual override only when VIX is blank.)
       </p>
+    </div>
+
+    <div class="card full">
+      <h2>Gap Inputs (Monday Shock Scenarios)</h2>
+
+      <div class="inputs">
+        <div class="field">
+          <label for="prevClose">Previous Close</label>
+          <input id="prevClose" type="number" placeholder="e.g., 25180" />
+        </div>
+
+        <div class="field">
+          <label for="todayOpen">Today Open</label>
+          <input id="todayOpen" type="number" placeholder="e.g., 24950" />
+        </div>
+
+        <div class="field">
+          <label for="gapBehavior">First 15–30 min behavior</label>
+          <select id="gapBehavior">
+            <option value="UNKNOWN" selected>Unknown / Wait</option>
+            <option value="CHOP_LOW">Choppy below VWAP (weak bounce)</option>
+            <option value="CONT_DOWN">Continuation down (lower lows)</option>
+            <option value="REV_UP">Reversal up (V-shape)</option>
+            <option value="RECLAIM_VWAP">Reclaim VWAP + hold</option>
+            <option value="REJECT_VWAP">Reject VWAP + drop</option>
+            <option value="RANGE_PIN">Range / Pinning</option>
+            <option value="WHIPSAW">Whipsaw / both sides</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="vwapState">VWAP State</label>
+          <select id="vwapState">
+            <option value="UNKNOWN" selected>Unknown</option>
+            <option value="ABOVE">Above VWAP</option>
+            <option value="BELOW">Below VWAP</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="gapPillStatic">Gap (auto)</label>
+          <input id="gapPillStatic" type="text" value="—" disabled />
+        </div>
+
+        <div class="field">
+          <label for="gapPctStatic">Gap % (auto)</label>
+          <input id="gapPctStatic" type="text" value="—" disabled />
+        </div>
+      </div>
+
+      <label class="chk" style="margin-top:8px;">
+        <input type="checkbox" data-group="EVENT" data-w="1"> Event / News day today
+      </label>
     </div>
 
     <div class="card">
@@ -143,7 +196,7 @@ Event sentiment only “tilts” the bias when your signals are mixed.
     </div>
 
     <div class="card">
-      <h2>Breakout / Rejection</h2>
+      <h2>Levels</h2>
       <label class="chk"><input type="checkbox" data-group="BREAKOUT" data-w="1">Full-body close above resistance</label>
       <label class="chk"><input type="checkbox" data-group="BREAKDOWN" data-w="1">Full-body close below support</label>
       <label class="chk"><input type="checkbox" data-group="RANGE" data-w="1">Long wicks / rejection dominates</label>
@@ -156,11 +209,11 @@ Event sentiment only “tilts” the bias when your signals are mixed.
       <label class="chk"><input type="checkbox" data-group="IV_LOW" data-w="1">IV Low (manual override)</label>
       <label class="chk"><input type="checkbox" data-group="BIGMOVE" data-w="1">Expect BIG move (150–250+ pts)</label>
       <label class="chk"><input type="checkbox" data-group="PIN" data-w="1">Expect pinning / slow grind near strike</label>
-      <label class="chk"><input type="checkbox" data-group="EVENT" data-w="1">Event / news day today</label>
     </div>
 
     <div class="card full">
       <div class="row">
+        <div class="pill" id="scenarioPill">Scenario: -</div>
         <div class="pill" id="bullPill">Bull: 0</div>
         <div class="pill" id="bearPill">Bear: 0</div>
         <div class="pill" id="rangePill">Range: 0</div>
